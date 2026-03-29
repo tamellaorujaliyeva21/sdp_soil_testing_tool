@@ -1,32 +1,31 @@
+#include <SoftwareSerial.h>
+
+// RX on Pin 10, TX on Pin 11
+SoftwareSerial sensorSim(10, 11); 
+
+// Dummy NPK + 4 values (7 total)
+// Format: Humidity, Temp, EC, pH, N, P, K
+// this represents the 19 bytes of sensor data
+byte sensorResponse[] = {0x01, 0x03, 0x0E, 0x00, 0x14, 0x00, 0xFA, 0x00, 0x32, 0x00, 0x46, 0x00, 0x1E, 0x00, 0x28, 0x00, 0x32, 0x12, 0x34};
+
 void setup() {
-  Serial.begin(9600); // UART communication
+  Serial.begin(9600);    // Debugging
+  sensorSim.begin(9600); // UART Comm to Pi
+  Serial.println("NPK Sensor Simulator Ready...");
 }
 
 void loop() {
-  // Fake sensor values
-  int nitrogen = random(10, 100);
-  int phosphorus = random(10, 100);
-  int potassium = random(10, 100);
-  float temperature = random(200, 350) / 10.0; // 20.0–35.0
-  float humidity = random(300, 800) / 10.0;    // 30–80%
-  float ph = random(50, 80) / 10.0;            // 5.0–8.0
-  float conductivity = random(100, 1000);      // µS/cm
-
-  // Format similar to real sensor output
-  Serial.print("N:");
-  Serial.print(nitrogen);
-  Serial.print(",P:");
-  Serial.print(phosphorus);
-  Serial.print(",K:");
-  Serial.print(potassium);
-  Serial.print(",T:");
-  Serial.print(temperature);
-  Serial.print(",H:");
-  Serial.print(humidity);
-  Serial.print(",pH:");
-  Serial.print(ph);
-  Serial.print(",EC:");
-  Serial.println(conductivity);
-
-  delay(2000); // send every 2 seconds
+  if (sensorSim.available() > 0) {
+    // Read the incoming request from Pi (usually 8 bytes)
+    while(sensorSim.available()) {
+      sensorSim.read(); 
+    }
+    
+    // Small delay to simulate sensor processing
+    delay(50);
+    
+    // Send the dummy data back
+    sensorSim.write(sensorResponse, sizeof(sensorResponse));
+    Serial.println("Data sent to Raspberry Pi");
+  }
 }
