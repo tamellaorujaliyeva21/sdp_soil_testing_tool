@@ -12,7 +12,7 @@ DEVICE_ID = "8f3c1a7d2b6e4c90a5d1f8b73e2c6a41"
 
 # Serial setup (UART)
 ser = serial.Serial(
-    port='/dev/ttyS0', 
+    port='/dev/serial0',  # <-- Change this line
     baudrate=9600,
     parity=serial.PARITY_NONE,
     stopbits=serial.STOPBITS_ONE,
