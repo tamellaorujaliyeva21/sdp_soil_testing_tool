@@ -94,9 +94,15 @@ def upload_readings_batch(device_id, readings, timeout=120):
         return None
 
 try:
-    print("Starting Debug Data Collection...")
-    READ_INTERVAL_SECONDS = 300  
-    READINGS_PER_BATCH = 12      
+    print("Starting Testing Data Collection...")
+    
+    # --- TIMING CONFIGURATION FOR TESTING ---
+    # READ_INTERVAL_SECONDS = 300  # Commented out: Original 5 minutes
+    READ_INTERVAL_SECONDS = 120    # Test value: 2 minutes
+    
+    # READINGS_PER_BATCH = 12      # Commented out: Original 1 hour batch
+    READINGS_PER_BATCH = 5         # Test value: 5 readings * 2 min = 10 minute batch
+    # ----------------------------------------
     
     while True:
         batch_array = []
@@ -108,7 +114,7 @@ try:
             if reading:
                 batch_array.append(reading)
                 i += 1 
-                print(f"   --> Added to batch ({i}/{READINGS_PER_BATCH}). Sleeping 5 minutes...")
+                print(f"   --> Added to batch ({i}/{READINGS_PER_BATCH}). Sleeping 2 minutes...")
                 
                 if i < READINGS_PER_BATCH:
                     time.sleep(READ_INTERVAL_SECONDS)
@@ -117,7 +123,7 @@ try:
                 time.sleep(5)
 
         if batch_array:
-            print(f"\n>>> 1 HOUR ELAPSED. Uploading {len(batch_array)} readings...")
+            print(f"\n>>> 10 MINUTES ELAPSED. Uploading {len(batch_array)} readings...")
             response = upload_readings_batch(DEVICE_ID, batch_array)
             if response:
                 print(f">>> Uploaded Successfully: {response}\n")
