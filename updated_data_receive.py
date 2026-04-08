@@ -5,7 +5,7 @@ import time
 from datetime import datetime, timezone
 
 # ====== CONFIG ======
-DEVICE_ID = "my-device-001"
+DEVICE_ID = "8f3c1a7d2b6e4c90a5d1f8b73e2c6a41"
 
 # Serial setup (UART)
 ser = serial.Serial(
