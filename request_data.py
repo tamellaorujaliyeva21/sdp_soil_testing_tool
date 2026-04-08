@@ -7,10 +7,8 @@ import urllib.request
 import urllib.error
 from datetime import datetime, timezone
 
-# ====== CONFIG ======
 DEVICE_ID = "8f3c1a7d2b6e4c90a5d1f8b73e2c6a41"
 
-# Serial setup (UART)
 ser = serial.Serial(
     port='/dev/serial0', 
     baudrate=9600,
@@ -20,20 +18,12 @@ ser = serial.Serial(
     timeout=2  
 )
 
-# Modbus request frame to trigger the Arduino
 REQUEST_FRAME = b'\x01\x03\x00\x00\x00\x07\x04\x08'
 
-# ====== SENSOR READ FUNCTION ======
 def read_sensor():
     ser.reset_input_buffer()
-    
-    # 1. Ask Arduino for data
     ser.write(REQUEST_FRAME)
-    
-    # 2. Give the Arduino half a second to process and reply
     time.sleep(0.5) 
-    
-    # 3. Read the 19-byte response
     response = ser.read(19)
     
     if len(response) == 19 and response.startswith(b'\x01\x03\x0e'):
@@ -56,18 +46,15 @@ def read_sensor():
                 "npk_p": p,
                 "npk_k": k
             }
-
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] Read Success: Temp={temp}°C, Hum={hum}%, pH={ph}")
+            print("Read")
             return reading
-
-        except Exception as e:
-            print("Parsing error:", e)
+        except:
+            print("Error")
             return None
     else:
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] Error: Incomplete or invalid payload received.")
+        print("Error")
         return None
 
-# ====== API UPLOAD FUNCTION ======
 def upload_readings_batch(device_id, readings, timeout=120):
     url = "https://soil-repo-gcp-git-678290165816.europe-west1.run.app"
     key = "smksmKDMkcsmaskamAK12021SKMS1"
@@ -81,71 +68,47 @@ def upload_readings_batch(device_id, readings, timeout=120):
     }
 
     data = json.dumps(body).encode("utf-8")
-
     req = urllib.request.Request(
         f"{url}/readings/batch",
         data=data,
         method="POST",
-        headers={
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "X-Api-Key": key,
-        },
+        headers={"Content-Type": "application/json", "Accept": "application/json", "X-Api-Key": key},
     )
 
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             result = resp.read().decode("utf-8")
             return json.loads(result)
-    except urllib.error.HTTPError as e:
-        print("HTTP Error:", e.read().decode())
-    except urllib.error.URLError as e:
-        print("Connection Error:", e)
+    except:
+        return None
 
-    return None
-
-# ====== MAIN LOOP ======
 try:
-    print("Starting Batch Data Collection...")
-    print("Interval: Read every 5 minutes. Upload every 1 hour (12 readings).")
-    print("="*60)
-    
-    # Timing configuration
-    READ_INTERVAL_SECONDS = 300  # 5 minutes
-    READINGS_PER_BATCH = 12      # 12 readings * 5 mins = 60 mins
+    print("Ready")
+    READ_INTERVAL_SECONDS = 300  
+    READINGS_PER_BATCH = 12      
     
     while True:
-        # Create an empty list to store the hour's worth of data
         batch_array = []
+        i = 0
         
-        # Loop 12 times
-        for i in range(READINGS_PER_BATCH):
+        while i < READINGS_PER_BATCH:
             reading = read_sensor()
+            
             if reading:
                 batch_array.append(reading)
-            
-            readings_left = READINGS_PER_BATCH - (i + 1)
-            print(f"   --> Sleeping 5 minutes... ({readings_left} readings left until upload)")
-            
-            # Sleep 5 minutes (unless it is the final reading of the hour)
-            if i < READINGS_PER_BATCH - 1:
-                time.sleep(READ_INTERVAL_SECONDS)
+                i += 1 
+                if i < READINGS_PER_BATCH:
+                    time.sleep(READ_INTERVAL_SECONDS)
+            else:
+                time.sleep(5)
 
-        # 1 Hour has passed! Upload the accumulated array.
-        print("\n" + "="*60)
-        print(f">>> 1 HOUR ELAPSED. Uploading batch of {len(batch_array)} readings to GCP...")
-        
         if batch_array:
             response = upload_readings_batch(DEVICE_ID, batch_array)
-            print(">>> Upload Response:", response)
-        else:
-            print(">>> No valid readings were collected this hour. Skipping upload.")
-            
-        print("="*60 + "\n")
-
-        # Sleep for 5 minutes before starting the next hour's cycle
-        time.sleep(READ_INTERVAL_SECONDS)
+            if response:
+                print("Uploaded")
+            else:
+                print("Error")
 
 except KeyboardInterrupt:
     ser.close()
-    print("\nSerial closed.")
+    print("Closed")
