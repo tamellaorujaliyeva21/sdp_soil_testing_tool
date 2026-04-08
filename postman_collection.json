@@ -1,0 +1,279 @@
+{
+  "info": {
+    "_postman_id": "c4d5e6f7-crm-hardware-soil-report",
+    "name": "Soil Report — CRM & hardware",
+    "description": "Alerts, purchases, device groups, and devices. Set `baseUrl` and `firebaseIdToken` (Firebase ID JWT). Admin-only routes need a token whose user has the Admin role. Alerts: optional `device_id` / `device_group_id`, required `message`, TIMESTAMP `created_at` (optional in body, defaults to now). GET /alerts supports `deviceGroupId` query param.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "firebaseIdToken", "value": "" },
+    { "key": "targetUserId", "value": "" },
+    { "key": "alertId", "value": "" },
+    { "key": "purchaseId", "value": "" },
+    { "key": "groupId", "value": "" },
+    { "key": "deviceId", "value": "device-example-01" }
+  ],
+  "item": [
+    {
+      "name": "Alerts",
+      "item": [
+        {
+          "name": "List alerts",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{firebaseIdToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/alerts?limit=50&offset=0&unreadOnly=false"
+          }
+        },
+        {
+          "name": "Get alert by id",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{firebaseIdToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/alerts/{{alertId}}"
+          }
+        },
+        {
+          "name": "Create alert (Admin)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{firebaseIdToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"{{targetUserId}}\",\n  \"device_id\": \"{{deviceId}}\",\n  \"device_group_id\": null,\n  \"message\": \"Low moisture\",\n  \"created_at\": \"2026-04-02T12:00:00Z\",\n  \"is_read\": false,\n  \"alert_type\": 1\n}"
+            },
+            "url": "{{baseUrl}}/alerts"
+          }
+        },
+        {
+          "name": "Update alert",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{firebaseIdToken}}", "type": "string" }]
+            },
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Updated message\",\n  \"is_read\": true,\n  \"alert_type\": 1\n}"
+            },
+            "url": "{{baseUrl}}/alerts/{{alertId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Purchases",
+      "item": [
+        {
+          "name": "List purchases",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{firebaseIdToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/purchases?limit=50&offset=0"
+          }
+        },
+        {
+          "name": "Get purchase by id",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{firebaseIdToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/purchases/{{purchaseId}}"
+          }
+        },
+        {
+          "name": "Create purchase",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{firebaseIdToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"device_id\": \"{{deviceId}}\",\n  \"purchase_date\": \"2026-04-02T12:00:00Z\",\n  \"status\": 1,\n  \"price\": 49.99,\n  \"currency\": \"USD\",\n  \"notes\": \"Postman example\"\n}"
+            },
+            "url": "{{baseUrl}}/purchases"
+          }
+        },
+        {
+          "name": "Update purchase",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{firebaseIdToken}}", "type": "string" }]
+            },
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"purchase_date\": \"2026-04-03T10:00:00Z\",\n  \"status\": 2,\n  \"price\": 39.99,\n  \"currency\": \"USD\",\n  \"notes\": \"Updated notes\"\n}"
+            },
+            "url": "{{baseUrl}}/purchases/{{purchaseId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Device groups",
+      "item": [
+        {
+          "name": "List groups",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{firebaseIdToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/groups"
+          }
+        },
+        {
+          "name": "Get group by id",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{firebaseIdToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/groups/{{groupId}}"
+          }
+        },
+        {
+          "name": "Create group",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{firebaseIdToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"group_name\": \"Garden A\",\n  \"notes\": \"Optional notes\",\n  \"location\": \"POINT(-122.084 37.421)\"\n}"
+            },
+            "url": "{{baseUrl}}/groups"
+          }
+        },
+        {
+          "name": "Update group",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{firebaseIdToken}}", "type": "string" }]
+            },
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"group_name\": \"Garden A (renamed)\",\n  \"notes\": \"Updated\",\n  \"location\": \"POINT(-122.1 37.43)\"\n}"
+            },
+            "url": "{{baseUrl}}/groups/{{groupId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Devices",
+      "item": [
+        {
+          "name": "List devices",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{firebaseIdToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/devices"
+          }
+        },
+        {
+          "name": "Get device by path id",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{firebaseIdToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/devices/{{deviceId}}"
+          }
+        },
+        {
+          "name": "Create device (user)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{firebaseIdToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"device_id\": \"{{deviceId}}\",\n  \"device_name\": \"Sensor 1\",\n  \"group_id\": null,\n  \"plant_type\": 1,\n  \"soil_type\": 1,\n  \"location\": \"POINT(-122.084 37.421)\",\n  \"location_notes\": \"Backyard\",\n  \"operational_status\": 1,\n  \"firmware_version\": \"1.0.0\"\n}"
+            },
+            "url": "{{baseUrl}}/devices"
+          }
+        },
+        {
+          "name": "Create device (Admin — set user_id)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{firebaseIdToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"device_id\": \"{{deviceId}}\",\n  \"user_id\": \"{{targetUserId}}\",\n  \"device_name\": \"Sensor for user\"\n}"
+            },
+            "url": "{{baseUrl}}/devices"
+          }
+        },
+        {
+          "name": "Update device",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{firebaseIdToken}}", "type": "string" }]
+            },
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"device_name\": \"Updated name\",\n  \"group_id\": null,\n  \"plant_type\": 1,\n  \"soil_type\": 1,\n  \"location\": \"POINT(-122.09 37.42)\",\n  \"location_notes\": \"Moved\",\n  \"operational_status\": 1,\n  \"firmware_version\": \"1.0.1\",\n  \"last_sync\": \"2026-04-02T15:00:00Z\",\n  \"configured_at\": \"2026-04-01T10:00:00Z\"\n}"
+            },
+            "url": "{{baseUrl}}/devices/{{deviceId}}"
+          }
+        }
+      ]
+    }
+  ]
+}
