@@ -98,10 +98,10 @@ try:
     
     # --- TIMING CONFIGURATION FOR TESTING ---
     # READ_INTERVAL_SECONDS = 300  # Commented out: Original 5 minutes
-    READ_INTERVAL_SECONDS = 120    # Test value: 2 minutes
+    READ_INTERVAL_SECONDS = 30    # Test value: 2 minutes
     
     # READINGS_PER_BATCH = 12      # Commented out: Original 1 hour batch
-    READINGS_PER_BATCH = 5         # Test value: 5 readings * 2 min = 10 minute batch
+    READINGS_PER_BATCH = 6         # Test value: 5 readings * 2 min = 10 minute batch
     # ----------------------------------------
     
     while True:
