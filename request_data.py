@@ -22,6 +22,7 @@ REQUEST_FRAME = b'\x01\x03\x00\x00\x00\x07\x04\x08'
 
 def read_sensor():
     ser.reset_input_buffer()
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Sending request to Arduino...")
     ser.write(REQUEST_FRAME)
     time.sleep(0.5) 
     response = ser.read(19)
@@ -46,13 +47,16 @@ def read_sensor():
                 "npk_p": p,
                 "npk_k": k
             }
-            print("Read")
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] SUCCESS: Temp: {temp}°C, Hum: {hum}%, pH: {ph}")
             return reading
-        except:
-            print("Error")
+        except Exception as e:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] ERROR PARSING: {e}")
             return None
     else:
-        print("Error")
+        if len(response) == 0:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] ERROR: Dead Silence (0 bytes received). Arduino not responding.")
+        else:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] ERROR: Garbled Data ({len(response)} bytes). Hex: {response.hex(' ')}")
         return None
 
 def upload_readings_batch(device_id, readings, timeout=120):
@@ -79,11 +83,18 @@ def upload_readings_batch(device_id, readings, timeout=120):
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             result = resp.read().decode("utf-8")
             return json.loads(result)
-    except:
+    except urllib.error.HTTPError as e:
+        print(f"HTTP Error: {e.code} - {e.read().decode()}")
+        return None
+    except urllib.error.URLError as e:
+        print(f"Connection Error: {e}")
+        return None
+    except Exception as e:
+        print(f"Unexpected Upload Error: {e}")
         return None
 
 try:
-    print("Ready")
+    print("Starting Debug Data Collection...")
     READ_INTERVAL_SECONDS = 300  
     READINGS_PER_BATCH = 12      
     
@@ -97,18 +108,22 @@ try:
             if reading:
                 batch_array.append(reading)
                 i += 1 
+                print(f"   --> Added to batch ({i}/{READINGS_PER_BATCH}). Sleeping 5 minutes...")
+                
                 if i < READINGS_PER_BATCH:
                     time.sleep(READ_INTERVAL_SECONDS)
             else:
+                print("   --> Failed to read. Retrying in 5 seconds...")
                 time.sleep(5)
 
         if batch_array:
+            print(f"\n>>> 1 HOUR ELAPSED. Uploading {len(batch_array)} readings...")
             response = upload_readings_batch(DEVICE_ID, batch_array)
             if response:
-                print("Uploaded")
+                print(f">>> Uploaded Successfully: {response}\n")
             else:
-                print("Error")
+                print(">>> Upload Failed.\n")
 
 except KeyboardInterrupt:
     ser.close()
-    print("Closed")
+    print("\nScript closed safely.")
