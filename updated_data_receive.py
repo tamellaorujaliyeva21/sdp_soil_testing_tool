@@ -119,7 +119,8 @@ try:
             try:
                 response = upload_readings_batch(
                     DEVICE_ID,
-                    [reading]  # batch format
+                    [reading],  # <-- Make sure there is a comma here
+                    api_key="smksmKDMkcsmaskamAK12021SKMS1"  # <-- Added API key here
                 )
                 print("Uploaded:", response)
 
@@ -128,6 +129,9 @@ try:
 
         time.sleep(5)  # wait between readings
 
+except KeyboardInterrupt:
+    ser.close()
+    print("\nSerial closed.")
 except KeyboardInterrupt:
     ser.close()
     print("\nSerial closed.")
