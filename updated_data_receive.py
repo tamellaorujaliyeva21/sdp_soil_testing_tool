@@ -72,9 +72,9 @@ import urllib.request
 import urllib.error
 
 
-def upload_readings_batch(device_id, readings, base_url=None, api_key=None, timeout=120):
-    url = (base_url or os.environ.get("SOIL_API_BASE_URL", "http://localhost:8080")).rstrip("/")
-    key = (api_key if api_key else os.environ.get("READINGS_UPLOAD_API_KEY", "")).strip()
+def upload_readings_batch(device_id, readings, timeout=120):
+    url = "https://soil-repo-gcp-git-678290165816.europe-west1.run.app"
+    key = "smksmKDMkcsmaskamAK12021SKMS1"
 
     if not key:
         raise RuntimeError("Missing API key.")
@@ -120,7 +120,7 @@ try:
                 response = upload_readings_batch(
                     DEVICE_ID,
                     [reading],  # <-- Make sure there is a comma here
-                    api_key="smksmKDMkcsmaskamAK12021SKMS1"  # <-- Added API key here
+                    
                 )
                 print("Uploaded:", response)
 
