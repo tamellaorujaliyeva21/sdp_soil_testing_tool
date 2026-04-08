@@ -35,6 +35,7 @@ def read_sensor():
         print(f"--- Sensor Data ---")
         print(f"Nitrogen: {n} mg/kg | Phosphorus: {p} mg/kg | Potassium: {k} mg/kg")
         print(f"pH: {ph} | Temp: {temp/10.0}°C | Humidity: {hum/10.0}%")
+        #print(f"Conductivity (EC): {ec} µS/cm")
     else:
         print("Error: No response or incomplete data.")
 
