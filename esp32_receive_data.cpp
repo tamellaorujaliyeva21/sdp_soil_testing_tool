@@ -1,12 +1,14 @@
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <Preferences.h>
 #include <time.h>
+#include "esp_sleep.h"
 
 // ===================== HOTSPOT CONFIG =====================
-const char* WIFI_SSID = "Malik 1";
-const char* WIFI_PASSWORD = "19681113";
+const char* WIFI_SSID = "ADA_Event";
+const char* WIFI_PASSWORD = "R7h588aW8";
 
 // ===================== SERVER CONFIG =====================
 const char* SERVER_URL = "https://soil-repo-gcp-git-678290165816.europe-west1.run.app/readings/batch";
@@ -19,10 +21,10 @@ const char* DEVICE_ID = "8f3c1a7d2b6e4c90a5d1f8b73e2c6a41";
 HardwareSerial SensorSerial(2);
 uint8_t REQUEST_FRAME[] = {0x01, 0x03, 0x00, 0x00, 0x00, 0x07, 0x04, 0x08};
 
-// ===================== TIMING =====================
-const unsigned long READ_INTERVAL_MS = 5UL * 60UL * 1000UL; // 5 minutes
-const int READINGS_PER_BATCH = 12;                          // 12 * 5 min = 60 min
-const unsigned long WIFI_RETRY_INTERVAL_MS = 15000UL;
+// ===================== SLEEP / BATCH =====================
+const uint64_t SLEEP_SECONDS = 300;   // 5 minutes
+const uint64_t uS_TO_S_FACTOR = 1000000ULL;
+const int READINGS_PER_BATCH = 12;    // 12 readings = 1 hour
 
 // ===================== STORAGE =====================
 Preferences prefs;
@@ -36,16 +38,12 @@ struct Reading {
   uint16_t n;
   uint16_t p;
   uint16_t k;
-  char reading_time[25]; // YYYY-MM-DDTHH:MM:SSZ
+  char reading_time[25];
 };
 
 // ===================== BATCH =====================
 Reading batch[READINGS_PER_BATCH];
 int batchCount = 0;
-
-// ===================== SCHEDULING =====================
-unsigned long lastReadAt = 0;
-unsigned long lastWiFiRetryAt = 0;
 
 // ===================== HELPERS =====================
 void printDivider() {
@@ -54,7 +52,7 @@ void printDivider() {
 
 void printReading(const Reading& r, int index) {
   Serial.printf(
-    "[%d] %s | Temp: %.2f C | Moist: %.2f %% | pH: %.2f | EC: %u | N:%u P:%u K:%u\n",
+    "[%d] %s | Temp: %.2f C | Moist: %.2f %% | pH: %.2f | EC:%u | N:%u P:%u K:%u\n",
     index,
     r.reading_time,
     r.temperature,
@@ -82,10 +80,23 @@ void connectNtpIfPossible() {
   Serial.println("NTP sync requested");
 }
 
+bool waitForNtpSync(unsigned long timeoutMs = 5000) {
+  unsigned long start = millis();
+
+  while (millis() - start < timeoutMs) {
+    time_t now = time(nullptr);
+    if (now > 1700000000) {
+      return true;
+    }
+    delay(200);
+  }
+
+  return false;
+}
+
 void makeUtcTimestamp(char* out, size_t len) {
   time_t now = time(nullptr);
 
-  // sanity check so we don't use epoch/garbage before sync
   if (now > 1700000000) {
     struct tm timeinfo;
     gmtime_r(&now, &timeinfo);
@@ -93,12 +104,8 @@ void makeUtcTimestamp(char* out, size_t len) {
     return;
   }
 
-  // fallback if real time is not available yet
-  unsigned long totalSeconds = millis() / 1000UL;
-  unsigned long seconds = totalSeconds % 60UL;
-  unsigned long minutes = (totalSeconds / 60UL) % 60UL;
-  unsigned long hours   = (totalSeconds / 3600UL) % 24UL;
-  snprintf(out, len, "2026-04-17T%02lu:%02lu:%02luZ", hours, minutes, seconds);
+  // fallback while NTP not yet synced
+  snprintf(out, len, "2026-04-21T00:00:00Z");
 }
 
 // ===================== PREFERENCES =====================
@@ -151,28 +158,17 @@ void clearBatchAndPreferences() {
 }
 
 // ===================== WIFI =====================
-bool ensureWiFi(bool verbose = true) {
+bool ensureWiFi() {
   if (WiFi.status() == WL_CONNECTED) return true;
 
-  unsigned long now = millis();
-
-  // allow immediate first attempt after boot
-  if (lastWiFiRetryAt != 0 && now - lastWiFiRetryAt < WIFI_RETRY_INTERVAL_MS) {
-    return false;
-  }
-
-  lastWiFiRetryAt = now;
-
-  if (verbose) {
-    Serial.println("Reconnecting WiFi...");
-  }
-
+  Serial.println("Connecting WiFi...");
   WiFi.disconnect(true, true);
   delay(300);
+
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
-  int retries = 15;
+  int retries = 20;
   while (WiFi.status() != WL_CONNECTED && retries-- > 0) {
     delay(1000);
     Serial.print(".");
@@ -180,10 +176,21 @@ bool ensureWiFi(bool verbose = true) {
   Serial.println();
 
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("WiFi reconnected!");
+    Serial.println("WiFi connected!");
+    Serial.print("WiFi status: ");
+    Serial.println(WiFi.status());
     Serial.print("IP: ");
     Serial.println(WiFi.localIP());
+    Serial.print("Gateway: ");
+    Serial.println(WiFi.gatewayIP());
+    Serial.print("RSSI: ");
+    Serial.println(WiFi.RSSI());
+
     connectNtpIfPossible();
+    bool ntpOk = waitForNtpSync(5000);
+    Serial.print("NTP synced: ");
+    Serial.println(ntpOk ? "YES" : "NO");
+
     return true;
   }
 
@@ -265,22 +272,39 @@ bool addReadingToBatch(const Reading& r) {
 
 // ===================== JSON =====================
 String buildBatchJson() {
-  DynamicJsonDocument doc(4096);
+  DynamicJsonDocument doc(1024);
 
   doc["device_id"] = DEVICE_ID;
   JsonArray readings = doc.createNestedArray("readings");
 
+  float sumTemp = 0.0f;
+  float sumMoist = 0.0f;
+  float sumPh = 0.0f;
+  uint32_t sumEc = 0;
+  uint32_t sumN = 0;
+  uint32_t sumP = 0;
+  uint32_t sumK = 0;
+
   for (int i = 0; i < batchCount; i++) {
-    JsonObject r = readings.createNestedObject();
-    r["reading_time"] = batch[i].reading_time;
-    r["temperature"] = batch[i].temperature;
-    r["moisture"] = batch[i].moisture;
-    r["conductivity"] = batch[i].ec;
-    r["ph_value"] = batch[i].ph;
-    r["npk_n"] = batch[i].n;
-    r["npk_p"] = batch[i].p;
-    r["npk_k"] = batch[i].k;
+    sumTemp += batch[i].temperature;
+    sumMoist += batch[i].moisture;
+    sumPh += batch[i].ph;
+    sumEc += batch[i].ec;
+    sumN += batch[i].n;
+    sumP += batch[i].p;
+    sumK += batch[i].k;
   }
+
+  JsonObject r = readings.createNestedObject();
+
+  r["reading_time"] = batch[batchCount - 1].reading_time;
+  r["temperature"] = sumTemp / batchCount;
+  r["moisture"] = sumMoist / batchCount;
+  r["conductivity"] = (uint16_t)(sumEc / batchCount);
+  r["ph_value"] = sumPh / batchCount;
+  r["npk_n"] = (uint16_t)(sumN / batchCount);
+  r["npk_p"] = (uint16_t)(sumP / batchCount);
+  r["npk_k"] = (uint16_t)(sumK / batchCount);
 
   String json;
   serializeJson(doc, json);
@@ -301,16 +325,26 @@ bool uploadBatch() {
 
   String json = buildBatchJson();
 
+  WiFiClientSecure client;
+  client.setInsecure(); // testing only
+
   HTTPClient http;
   bool success = false;
 
   for (int attempt = 1; attempt <= 3; attempt++) {
     printDivider();
     Serial.printf("Upload attempt %d...\n", attempt);
-    Serial.println("Sending JSON:");
+    Serial.print("Free heap before HTTP: ");
+    Serial.println(ESP.getFreeHeap());
+    Serial.println("Sending averaged JSON:");
     Serial.println(json);
 
-    http.begin(SERVER_URL);
+    if (!http.begin(client, SERVER_URL)) {
+      Serial.println("http.begin() failed");
+      delay(3000);
+      continue;
+    }
+
     http.addHeader("Content-Type", "application/json");
     http.addHeader("Accept", "application/json");
     http.addHeader("X-Api-Key", API_KEY);
@@ -320,9 +354,14 @@ bool uploadBatch() {
     Serial.print("HTTP Code: ");
     Serial.println(code);
 
-    String response = http.getString();
-    Serial.println("Response body:");
-    Serial.println(response);
+    if (code <= 0) {
+      Serial.print("HTTP error: ");
+      Serial.println(http.errorToString(code));
+    } else {
+      String response = http.getString();
+      Serial.println("Response body:");
+      Serial.println(response);
+    }
 
     http.end();
 
@@ -333,13 +372,12 @@ bool uploadBatch() {
     }
 
     if (code >= 400 && code < 500) {
-      Serial.println("Client-side/validation error. Stopping retries for this cycle.");
+      Serial.println("Client-side/validation error. Stopping retries.");
       break;
     }
 
     Serial.println("Upload failed, retrying...");
     delay(3000);
-    ensureWiFi(false);
   }
 
   if (!success) {
@@ -349,46 +387,63 @@ bool uploadBatch() {
   return success;
 }
 
-// ===================== WORK =====================
-void performScheduledRead() {
-  printDivider();
-  Serial.println("Scheduled interval reached");
+// ===================== SLEEP =====================
+void goToDeepSleep() {
+  Serial.println();
+  Serial.printf("Going to deep sleep for %llu seconds...\n", SLEEP_SECONDS);
+  Serial.flush();
 
-  ensureWiFi();
+  WiFi.disconnect(true, true);
+  WiFi.mode(WIFI_OFF);
+
+  esp_sleep_enable_timer_wakeup(SLEEP_SECONDS * uS_TO_S_FACTOR);
+  esp_deep_sleep_start();
+}
+
+// ===================== MAIN CYCLE =====================
+void runCycle() {
+  printDivider();
+  Serial.println("Wake -> read -> store -> maybe upload -> sleep");
+
+  // Recovery path:
+  // if a full batch was already saved from before, upload it first
+  if (batchCount >= READINGS_PER_BATCH) {
+    Serial.println("Recovered full stored batch -> uploading...");
+    if (uploadBatch()) {
+      clearBatchAndPreferences();
+    } else {
+      Serial.println("Upload failed, keeping stored batch");
+      goToDeepSleep();
+      return;
+    }
+  }
 
   Reading r;
   if (!readSensor(r)) {
     Serial.println("Sensor read failed");
+    goToDeepSleep();
     return;
   }
 
   if (!addReadingToBatch(r)) {
-    Serial.println("Failed to add reading to batch");
+    Serial.println("Failed to add reading");
+    goToDeepSleep();
     return;
   }
 
+  // If this wake collected the 6th reading, upload immediately
   if (batchCount >= READINGS_PER_BATCH) {
-    Serial.println("Batch full -> uploading...");
+    Serial.println("6th reading collected on this wake -> uploading average...");
     if (uploadBatch()) {
       clearBatchAndPreferences();
     } else {
-      Serial.println("Keeping stored batch for future retry");
+      Serial.println("Upload failed, keeping stored batch");
     }
-  }
-}
-
-void tryUploadPendingBatch() {
-  if (batchCount < READINGS_PER_BATCH) return;
-  if (WiFi.status() != WL_CONNECTED) return;
-
-  printDivider();
-  Serial.println("Pending full batch found, trying upload...");
-
-  if (uploadBatch()) {
-    clearBatchAndPreferences();
   } else {
-    Serial.println("Pending batch upload still failing");
+    Serial.println("Batch not full yet -> sleeping");
   }
+
+  goToDeepSleep();
 }
 
 // ===================== SETUP =====================
@@ -401,24 +456,17 @@ void setup() {
   Serial.println("Booting...");
   loadBatchFromPreferences();
 
-  ensureWiFi();
-  lastReadAt = millis() - READ_INTERVAL_MS; // first read immediately
+  esp_sleep_wakeup_cause_t wakeReason = esp_sleep_get_wakeup_cause();
+  if (wakeReason == ESP_SLEEP_WAKEUP_TIMER) {
+    Serial.println("Woke from timer deep sleep");
+  } else {
+    Serial.println("Normal power-on/reset boot");
+  }
 
-  // Uncomment ONCE only if you need to erase old bad saved data:
-  // clearBatchAndPreferences();
+  runCycle();
 }
 
 // ===================== LOOP =====================
 void loop() {
-  unsigned long now = millis();
-
-  ensureWiFi(false);
-  tryUploadPendingBatch();
-
-  if (now - lastReadAt >= READ_INTERVAL_MS) {
-    lastReadAt = now;
-    performScheduledRead();
-  }
-
-  delay(200);
+  // not used; device sleeps at end of each cycle
 }
